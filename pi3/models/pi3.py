@@ -157,13 +157,32 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             blk = self.decoder[i]
 
             if i % 2 == 0:
+                # Frame attention
                 pos = pos.reshape(B*N, hw, -1)
                 hidden = hidden.reshape(B*N, hw, -1)
+                hidden = blk(hidden, xpos=pos)
             else:
-                pos = pos.reshape(B, N*hw, -1)
-                hidden = hidden.reshape(B, N*hw, -1)
+                # Global attention
+                # 每轮全局注意力随机采样的图像数量
+                global_attn_N = 20
 
-            hidden = blk(hidden, xpos=pos)
+                if not self.training and N > global_attn_N:
+                    indices = torch.randperm(N, device=hidden.device)[:global_attn_N]
+                    
+                    hidden = hidden.reshape(B, N, hw, -1)
+                    hidden_sub = hidden[:, indices]
+                    pos_sub = pos.reshape(B, N, hw, -1)[:, indices]
+                    
+                    hidden_sub = hidden_sub.reshape(B, global_attn_N * hw, -1)
+                    pos_sub = pos_sub.reshape(B, global_attn_N * hw, -1)
+                    
+                    attn_output = blk(hidden_sub, xpos=pos_sub).reshape(B, global_attn_N, hw, -1)
+                    
+                    hidden[:, indices] = attn_output
+                else:
+                    hidden = hidden.reshape(B, N * hw, -1)
+                    pos = pos.reshape(B, N * hw, -1)
+                    hidden = blk(hidden, xpos=pos)
 
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
