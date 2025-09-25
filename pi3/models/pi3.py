@@ -153,6 +153,7 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             pos_special = torch.zeros(B * N, self.patch_start_idx, 2).to(hidden.device).to(pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
         
+        MODE = 0
         for i in range(len(self.decoder)):
             blk = self.decoder[i]
 
@@ -161,10 +162,12 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                 pos = pos.reshape(B*N, hw, -1)
                 hidden = hidden.reshape(B*N, hw, -1)
                 hidden = blk(hidden, xpos=pos)
-            else:
-                # Global attention
-                MODE = 0
+            elif MODE == 0: # default Pi3 global attention implementation
+                pos = pos.reshape(B, N*hw, -1)
+                hidden = hidden.reshape(B, N*hw, -1)
+                hidden = blk(hidden, xpos=pos)
                 
+            else:
                 # Reshape once at the beginning of the global attention block
                 hidden = hidden.reshape(B, N, hw, -1)
                 pos = pos.reshape(B, N, hw, -1)
