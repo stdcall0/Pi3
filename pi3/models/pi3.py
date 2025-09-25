@@ -173,10 +173,7 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                     hidden[:, indices] = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
                     return hidden
                 
-                hidden = GA(torch.arange(0, N, 2, device=hidden.device), hidden, pos)
-                hidden = GA(torch.arange(1, N, 2, device=hidden.device), hidden, pos)
-                hidden = GA(torch.arange(0, N//2, device=hidden.device), hidden, pos)
-                hidden = GA(torch.arange(N//2, N, device=hidden.device), hidden, pos)
+                hidden = GA(torch.arange(0, N, device=hidden.device), hidden, pos)
 
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
