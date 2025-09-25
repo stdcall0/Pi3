@@ -153,7 +153,6 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             pos_special = torch.zeros(B * N, self.patch_start_idx, 2).to(hidden.device).to(pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
         
-        mode_index = 0
         for i in range(len(self.decoder)):
             blk = self.decoder[i]
 
@@ -164,21 +163,50 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                 hidden = blk(hidden, xpos=pos)
             else:
                 # Global attention
-                hidden = hidden.reshape(B, N, hw, -1)
-                pos = pos.reshape(B, N, hw, -1)
-
-                def GA(indices, hidden, pos):
-                    attn_N = len(indices)
-                    
-                    hidden_sub = hidden[:, indices].reshape(B, attn_N*hw, -1)
-                    pos_sub = pos[:, indices].reshape(B, attn_N*hw, -1)
-                    hidden[:, indices] = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
-                    return hidden
+                MODE = 0
                 
-                # Possible Multilayer here
-                hidden = GA(torch.arange(0, N, device=hidden.device), hidden, pos)
+                if MODE == 0: # default Pi3 implementation
+                    pos = pos.reshape(B, N*hw, -1)
+                    hidden = hidden.reshape(B, N*hw, -1)
+                    hidden = blk(hidden, xpos=pos)
+                else:
+                    hidden = hidden.reshape(B, N, hw, -1)
+                    pos = pos.reshape(B, N, hw, -1)
                 
+                    def GA(indices, hidden, pos):
+                        attn_N = len(indices)
+                        
+                        hidden_sub = hidden[:, indices].reshape(B, attn_N*hw, -1)
+                        pos_sub = pos[:, indices].reshape(B, attn_N*hw, -1)
+                        hidden[:, indices] = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
+                        return hidden
 
+                    match MODE:
+                        case 1: # full attention
+                            hidden = GA(torch.arange(0, N, device=hidden.device), hidden, pos)
+                        case 2: # random selection attention
+                            attn_N = max(min(N, 20), N // 2)
+                            indices = torch.randperm(N, device=hidden.device)[:attn_N]
+                            hidden = GA(indices, hidden, pos)
+                        case 3: # alternating between full, odd, even attention
+                            match i // 2 % 3:
+                                case 0: # full attention
+                                    hidden = GA(torch.arange(0, N, device=hidden.device),
+                                                hidden, pos)
+                                case 1: # odd attention
+                                    hidden = GA(torch.arange(1, N, 2, device=hidden.device),
+                                                hidden, pos)
+                                case 2: # even attention
+                                    hidden = GA(torch.arange(0, N, 2, device=hidden.device),
+                                                hidden, pos)
+                        case 4: # sliding window attention
+                            attn_N = max(min(N, 20), N // 2)
+                            for start in range(0, N, attn_N//2):
+                                indices = torch.arange(start, min(start+attn_N, N), device=hidden.device)
+                                hidden = GA(indices, hidden, pos)
+                        case _:
+                            raise NotImplementedError
+                        
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
 
