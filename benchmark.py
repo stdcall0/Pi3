@@ -45,10 +45,7 @@ def run_example_script(cur_path: str, output_dir: str, data_path: str, mode: int
     )
 
     with open(log_path, 'w', encoding='utf-8') as log_file:
-        log_file.write("--- STDOUT ---\n")
         log_file.write(result.stdout)
-        log_file.write("\n\n--- STDERR ---\n")
-        log_file.write(result.stderr)
     
     if result.returncode == 0:
         print(f"  -> Successfully generated '{os.path.relpath(save_path, cur_path)}'.")
