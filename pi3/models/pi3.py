@@ -152,7 +152,8 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             pos = pos + 1
             pos_special = torch.zeros(B * N, self.patch_start_idx, 2).to(hidden.device).to(pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
-       
+        
+        mode_index = 0
         for i in range(len(self.decoder)):
             blk = self.decoder[i]
 
@@ -163,26 +164,34 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                 hidden = blk(hidden, xpos=pos)
             else:
                 # Global attention
-                # 每轮全局注意力随机采样的图像数量
-                global_attn_N = 20
+                GLOBAL_ATTENTION_MODES = ("full", "even", "odd")
+                mode = "full"
+                if i < len(self.decoder) - 2 and not self.training:
+                    mode = GLOBAL_ATTENTION_MODES[mode_index % len(GLOBAL_ATTENTION_MODES)]
+                    mode_index += 1
 
-                if not self.training and N > global_attn_N:
-                    indices = torch.randperm(N, device=hidden.device)[:global_attn_N]
-                    
-                    hidden = hidden.reshape(B, N, hw, -1)
-                    hidden_sub = hidden[:, indices]
-                    pos_sub = pos.reshape(B, N, hw, -1)[:, indices]
-                    
-                    hidden_sub = hidden_sub.reshape(B, global_attn_N * hw, -1)
-                    pos_sub = pos_sub.reshape(B, global_attn_N * hw, -1)
-                    
-                    attn_output = blk(hidden_sub, xpos=pos_sub).reshape(B, global_attn_N, hw, -1)
-                    
-                    hidden[:, indices] = attn_output
-                else:
-                    hidden = hidden.reshape(B, N * hw, -1)
-                    pos = pos.reshape(B, N * hw, -1)
-                    hidden = blk(hidden, xpos=pos)
+                # indices = torch.randperm(N, device=hidden.device)[:global_attn_N]
+                indices = None
+                match mode:
+                    case "full":
+                        indices = torch.arange(N, device=hidden.device)
+                    case "even":
+                        indices = torch.arange(0, N, 2, device=hidden.device)
+                    case "odd":
+                        indices = torch.arange(1, N, 2, device=hidden.device)
+                
+                attn_N = len(indices)
+                
+                hidden = hidden.reshape(B, N, hw, -1)
+                hidden_sub = hidden[:, indices]
+                pos_sub = pos.reshape(B, N, hw, -1)[:, indices]
+                
+                hidden_sub = hidden_sub.reshape(B, attn_N * hw, -1)
+                pos_sub = pos_sub.reshape(B, attn_N * hw, -1)
+                
+                attn_output = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
+                
+                hidden[:, indices] = attn_output
 
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
