@@ -164,16 +164,22 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                 hidden = blk(hidden, xpos=pos)
             else:
                 # Global attention
+                hidden = hidden.reshape(B, N, hw, -1)
+                pos = pos.reshape(B, N, hw, -1)
 
                 def GA(indices, hidden, pos):
                     attn_N = len(indices)
-                    hidden = hidden.reshape(B, N, hw, -1)
+                    
                     hidden_sub = hidden[:, indices].reshape(B, attn_N * hw, -1)
-                    pos_sub = pos.reshape(B, N, hw, -1)[:, indices].reshape(B, attn_N * hw, -1)
+                    pos_sub = pos[:, indices].reshape(B, attn_N * hw, -1)
                     hidden[:, indices] = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
                     return hidden
                 
+                # Possible Multilayer here
                 hidden = GA(torch.arange(0, N, device=hidden.device), hidden, pos)
+                
+                hidden = hidden.reshape(B, N * hw, -1)
+                pos = pos.reshape(B, N * hw, -1)
 
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
