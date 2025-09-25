@@ -170,16 +170,17 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                     hidden = hidden.reshape(B, N*hw, -1)
                     hidden = blk(hidden, xpos=pos)
                 else:
-                    hidden = hidden.reshape(B, N, hw, -1)
-                    pos = pos.reshape(B, N, hw, -1)
-                
-                    def GA(indices, hidden, pos):
+                    def GA(indices, current_hidden, current_pos):
+                        current_hidden = current_hidden.reshape(B, N, hw, -1)
+                        current_pos = current_pos.reshape(B, N, hw, -1)
+
                         attn_N = len(indices)
                         
-                        hidden_sub = hidden[:, indices].reshape(B, attn_N*hw, -1)
-                        pos_sub = pos[:, indices].reshape(B, attn_N*hw, -1)
-                        hidden[:, indices] = blk(hidden_sub, xpos=pos_sub).reshape(B, attn_N, hw, -1)
-                        return hidden
+                        hidden_sub = current_hidden[:, indices].reshape(B, attn_N*hw, -1)
+                        pos_sub = current_pos[:, indices].reshape(B, attn_N*hw, -1)
+                        
+                        new_hidden = blk(hidden_sub, xpos=pos_sub)
+                        return new_hidden
 
                     match MODE:
                         case 1: # full attention
