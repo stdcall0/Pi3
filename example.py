@@ -3,6 +3,7 @@ import argparse
 from pi3.utils.basic import load_images_as_tensor, write_ply
 from pi3.utils.geometry import depth_edge
 from pi3.models.pi3 import Pi3
+import time
 
 if __name__ == '__main__':
     # --- Argument Parsing ---
@@ -52,7 +53,17 @@ if __name__ == '__main__':
     dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
     with torch.no_grad():
         with torch.amp.autocast('cuda', dtype=dtype):
+            torch.cuda.reset_peak_memory_stats(device)
+            start_time = time.time()
+
             res = model(imgs[None]) # Add batch dimension
+
+            end_time = time.time()
+            peak_vram_gb = torch.cuda.max_memory_allocated(device) / (1024**3)
+
+    print(f"Model inference finished.")
+    print(f"Elapsed time: {end_time - start_time:.4f} seconds")
+    print(f"Peak GPU VRAM usage: {peak_vram_gb:.4f} GB")
 
     # 4. process mask
     masks = torch.sigmoid(res['conf'][..., 0]) > 0.1
