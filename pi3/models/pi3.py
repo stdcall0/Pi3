@@ -210,7 +210,11 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                             case 2: # even attention
                                 indices = torch.arange(0, N, 2, device=hidden.device)
                         hidden = GA(indices, hidden, pos)
-                
+                    case 4: # sliding window attention
+                        attn_N = max(min(N, 20), N // 2)
+                        for start in range(0, N, attn_N//2):
+                            indices = torch.arange(start, min(start+attn_N, N), device=hidden.device)
+                            hidden = GA(indices, hidden, pos)
                         
             if i+1 in [len(self.decoder)-1, len(self.decoder)]:
                 final_output.append(hidden.reshape(B*N, hw, -1))
