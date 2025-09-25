@@ -191,7 +191,7 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                     new_hidden[:, mask] = processed_hidden_part
                     new_hidden[:, ~mask] = hidden[:, ~mask]
                     
-                    return new_hidden.reshape(B, N*hw, -1)
+                    return new_hidden
 
                 match MODE:
                     case 1: # full attention
