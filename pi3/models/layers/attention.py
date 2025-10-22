@@ -385,31 +385,24 @@ class SageAttentionRope(AttentionRope):
     Uses INT8 quantization for QK^T and FP16/FP8 for PV to accelerate attention computation.
     """
     def forward(self, x: Tensor, attn_bias=None, xpos=None) -> Tensor:
-        if not SAGEATTENTION_AVAILABLE:
-            # Fallback to parent class implementation if SageAttention is not available
-            return super().forward(x, attn_bias, xpos)
-        
-        if attn_bias is not None:
-            # SageAttention doesn't support attn_bias, fallback to parent implementation
-            return super().forward(x, attn_bias, xpos)
-        
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).transpose(1, 3)
 
-        # q, k, v shape: (B, num_heads, N, head_dim)
+        # q, k, v = unbind(qkv, 2)
         q, k, v = [qkv[:,:,i] for i in range(3)]
         q, k = self.q_norm(q).to(v.dtype), self.k_norm(k).to(v.dtype)
 
-        # Apply RoPE if available
         if self.rope is not None:
             q = self.rope(q, xpos)
             k = self.rope(k, xpos)
 
-        # SageAttention expects (B, num_heads, seq_len, head_dim) which is "HND" layout
-        # Our q, k, v are already in this format after transpose(1, 3)
-        x = sageattn(q, k, v, tensor_layout="HND", is_causal=False)
+        if q.dtype == torch.bfloat16:
+            with nn.attention.sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+                x = sageattn(q, k, v)
+        else:
+            with nn.attention.sdpa_kernel([SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION]):
+                x = sageattn(q, k, v)
 
-        # Reshape back to (B, N, C)
         x = x.transpose(1, 2).reshape([B, N, C])
 
         x = self.proj(x)
