@@ -7,7 +7,7 @@ from .dinov2.layers import Mlp
 from ..utils.geometry import homogenize_points
 from .layers.pos_embed import RoPE2D, PositionGetter
 from .layers.block import BlockRope
-from .layers.attention import FlashAttentionRope
+from .layers.attention import FlashAttentionRope, SageAttentionRope, SAGEATTENTION_AVAILABLE
 from .layers.transformer_head import TransformerDecoder, LinearPts3d
 from .layers.camera_head import CameraHead
 from .dinov2.hub.backbones import dinov2_vitl14, dinov2_vitl14_reg
@@ -20,6 +20,17 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
             decoder_size='large',
         ):
         super().__init__()
+
+        # ----------------------
+        #   Attention Backend
+        # ----------------------
+        # Try to use SageAttention by default, fallback to FlashAttention if not available
+        if SAGEATTENTION_AVAILABLE:
+            attn_class = SageAttentionRope
+            print("[Pi3] Using SageAttention for decoder (accelerated with INT8 quantization)")
+        else:
+            attn_class = FlashAttentionRope
+            print("[Pi3] Using FlashAttention for decoder (SageAttention not available)")
 
         # ----------------------
         #        Encoder
@@ -77,7 +88,7 @@ class Pi3(nn.Module, PyTorchModelHubMixin):
                 ffn_layer=Mlp,
                 init_values=0.01,
                 qk_norm=True,
-                attn_class=FlashAttentionRope,
+                attn_class=attn_class,
                 rope=self.rope
             ) for _ in range(dec_depth)])
         self.dec_embed_dim = dec_embed_dim
