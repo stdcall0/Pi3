@@ -35,7 +35,7 @@ except ImportError:
 SAGEATTENTION_ENABLED = os.environ.get("SAGEATTENTION_DISABLED") is None
 try:
     if SAGEATTENTION_ENABLED:
-        from sageattention import sageattn
+        from sageattention import sageattn_qk_int8_pv_fp16_cuda as sageattn
         SAGEATTENTION_AVAILABLE = True
     else:
         raise ImportError
